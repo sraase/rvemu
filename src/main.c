@@ -192,7 +192,7 @@ int main(int argc, char **argv)
 		fail("clint: cannot initialize");
 	if (!(plic = plic_init(cpu)))
 		fail("plic: cannot initialize");
-	if (!(uart = uart_init(cpu)))
+	if (!(uart = uart_init(plic, 1)))
 		fail("uart: cannot initialize");
 
 	/* load memory */

@@ -149,7 +149,7 @@ int      plic_write32   (struct plic *plic, uint32_t addr, uint32_t  data);
 void     plic_irq       (struct plic *plic, unsigned irq);
 
 /* uart */
-struct   uart *uart_init(struct cpu *cpu);
+struct   uart *uart_init(struct plic *plic, unsigned irq);
 void     uart_tick      (struct uart *uart);
 void     uart_free      (struct uart *uart);
 int      uart_read8     (struct uart *uart, uint32_t addr, uint8_t *data);

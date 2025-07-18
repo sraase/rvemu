@@ -9,11 +9,16 @@
 #include <sys/select.h>
 #include "emu.h"
 
+/* forward ^C to UART if 1 */
+#define DISABLE_SIGNALS 1
+
 /* Intel 8250/16450-style UART */
 struct uart {
-	struct   cpu *cpu;
+	struct   plic *plic; /* interrupt controller */
+	unsigned irqnum;     /* interrupt number */
+
 	uint8_t  dll, dlh; /* Divisor Latch */
-	uint8_t  ier, isr; /* Interrupt Enable and Status */
+	uint8_t  ier, iir; /* Interrupt Enable and Identification */
 	uint8_t  lcr, lsr; /* Line Control and Status */
 	uint8_t  mcr, msr; /* Modem Control and Status */
 	uint8_t  scr;      /* Scratch Register */
@@ -65,10 +70,14 @@ void term_enter(void)
 
 	/* set raw mode */
 	tio_raw = tio_restore;
-	tio_raw.c_iflag &= ~(/*BRKINT |*/ ICRNL | INPCK | ISTRIP | IXON);
+	tio_raw.c_iflag &= ~(ICRNL | INPCK | ISTRIP | IXON);
 	tio_raw.c_oflag &= ~(OPOST);
 	tio_raw.c_cflag |=  (CS8);
-	tio_raw.c_lflag &= ~(ECHO | ICANON | IEXTEN /*| ISIG*/);
+	tio_raw.c_lflag &= ~(ECHO | ICANON | IEXTEN);
+#if DISABLE_SIGNALS
+	tio_raw.c_iflag &= ~(BRKINT);
+	tio_raw.c_lflag &= ~(ISIG);
+#endif
 	tcsetattr(STDIN_FILENO, TCSAFLUSH, &tio_raw);
 
 	/* set non-blocking */
@@ -86,10 +95,7 @@ int uart_read8(struct uart *uart, uint32_t addr, uint8_t *data)
 			/* RBR: Receiver Buffer Register */
 			if (read(STDIN_FILENO, data, 1) <= 0)
 				*data = 0xFF;
-
-			/* update Receive Buffer Full */
-			if (term_pending()) uart->isr |=  0x01;
-			else                uart->isr &= ~0x01;
+			uart->lsr &= ~0x01;
 		}
 		break;
 
@@ -105,23 +111,13 @@ int uart_read8(struct uart *uart, uint32_t addr, uint8_t *data)
 
 	case 0x02:
 		/* IIR: Interrupt Identification Register */
-		if (uart->isr & 0x01) {
-			*data = 0x04; /* Receive Buffer Full */
-		} else if (uart->isr & 0x02) {
-			*data = 0x02; /* Transmit Buffer Empty */
-		} else if (uart->isr & 0x04) {
-			*data = 0x06; /* Line Status Changed */
-		} else if (uart->isr & 0x08) {
-			*data = 0x00; /* Modem Status Changed */
-		} else {
-			*data = 0x00; /* no interrupt */
-		}
-		uart->isr &= ~0x02; /* clear Transmitter Buffer Empty */
+		*data = uart->iir & 0x07;
+		uart->lsr &= ~0x20;
 		break;
 
 	case 0x03:
 		/* LCR: Line Control Register */
-		*data = uart->lcr;
+		*data = uart->lcr & 0xFF;
 		break;
 
 	case 0x04:
@@ -131,19 +127,19 @@ int uart_read8(struct uart *uart, uint32_t addr, uint8_t *data)
 
 	case 0x05:
 		/* LSR: Line Status Register */
-		*data = term_pending() ? 0x61 : 0x60;
-		uart->isr &= ~0x04; /* clear Line Status Changed */
+		*data = uart->lsr & 0x7F;
+		uart->lsr &= ~0x1E;
 		break;
 
 	case 0x06:
 		/* MSR: Modem Status Register */
-		*data = uart->msr | 0x80;
+		*data = uart->msr & 0xFF;
 		uart->msr &= ~0x0F;
-		uart->isr &= ~0x08; /* clear Modem Status Changed */
 		break;
 
-	case 0x07: /* SCR */
-		*data = uart->scr;
+	case 0x07:
+		/* SCR: Scratch Register */
+		*data = uart->scr & 0xFF;
 		break;
 
 	default:
@@ -151,7 +147,7 @@ int uart_read8(struct uart *uart, uint32_t addr, uint8_t *data)
 		return 1;
 	}
 
-//info("uart read %02x   %02x", addr, *data);
+	uart_tick(uart);
 	return 0;
 }
 
@@ -167,29 +163,28 @@ int uart_write8(struct uart *uart, uint32_t addr, uint8_t data)
 			if (write(STDOUT_FILENO, &data, 1) != 1)
 				warn("uart: write failed");
 			fsync(STDOUT_FILENO);
-
-			/* update Transmitter Buffer Empty */
-			uart->isr &= ~0x02;
+			uart->lsr &= ~0x20;
 		}
 		break;
 
 	case 0x01:
 		if (uart->lcr & 0x80) {
 			/* DLH: Divider Latch High */
-			uart->dlh = data;
+			uart->dlh = data & 0xFF;
 		} else {
 			/* IER: Interrupt Enable Register */
-			uart->ier = data;
+			uart->ier = data & 0x0F;
 		}
 		break;
 
 	case 0x02:
 		/* FCR: FIFO Control Register */
-		break; /* no FIFO */
+		(void)data; /* no FIFO */
+		break;
 
 	case 0x03:
 		/* LCR: Line Control Register */
-		uart->lcr = data;
+		uart->lcr = data & 0xFF;
 		break;
 
 	case 0x04:
@@ -197,9 +192,19 @@ int uart_write8(struct uart *uart, uint32_t addr, uint8_t data)
 		uart->mcr = data & 0x0F;
 		break;
 
+	case 0x05:
+		/* LSR: Line Status Register */
+		(void)data;
+		break;
+
+	case 0x06:
+		/* MSR: Modem Status Register */
+		(void)data;
+		break;
+
 	case 0x07:
 		/* SCR: Scratch Register */
-		uart->scr = data;
+		uart->scr = data & 0xFF;
 		break;
 
 	default:
@@ -207,20 +212,29 @@ int uart_write8(struct uart *uart, uint32_t addr, uint8_t data)
 		return 1;
 	}
 
+	uart_tick(uart);
 	return 0;
 }
 
 void uart_tick(struct uart *uart)
 {
-	/* update Receive Buffer Full */
-	if (term_pending()) uart->isr |=  0x01;
-	else                uart->isr &= ~0x01;
+	uint8_t iir = uart->iir;
 
-#if 0
-	/* trigger interrupts */
-	if (uart->ier & uart->isr) cpu_irq_set  (uart->cpu, 11);
-	else                       cpu_irq_clear(uart->cpu, 11);
-#endif
+	/* update receiver and transmitter state */
+	if (term_pending())
+		uart->lsr |= 0x01;
+	uart->lsr |= 0x60;
+
+	/* update interrupt identification register */
+	if      (uart->ier & 0x04 && uart->lsr & 0x1E) uart->iir = 0x06;
+	else if (uart->ier & 0x01 && uart->lsr & 0x01) uart->iir = 0x04;
+	else if (uart->ier & 0x02 && uart->lsr & 0x20) uart->iir = 0x02;
+	else if (uart->ier & 0x08 && uart->msr & 0x0F) uart->iir = 0x00;
+	else                                           uart->iir = 0x01;
+
+	/* trigger interrupt if state changed */
+	if (uart->plic && uart->iir != iir && !(uart->iir & 0x01))
+		plic_irq(uart->plic, uart->irqnum);
 
 	return;
 }
@@ -235,11 +249,14 @@ void uart_free(struct uart *uart)
 	return;
 }
 
-struct uart *uart_init(struct cpu *cpu)
+struct uart *uart_init(struct plic *plic, unsigned irq)
 {
 	struct uart *uart = calloc(1, sizeof(struct uart));
 	if (uart) {
-		uart->cpu = cpu;
+		uart->plic   = plic;
+		uart->irqnum = irq;
+		uart->iir    = 0x01;
+		uart->lsr    = 0x60;
 
 		/* prepare terminal */
 		if (isatty(STDIN_FILENO) && isatty(STDOUT_FILENO))
