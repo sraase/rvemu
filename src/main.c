@@ -160,7 +160,7 @@ static void load(const char *type,
 		fail("load: cannot open %s", file);
 
 	pos = start;
-	while ((sz = fread(&ram[pos], 1, 2048, fh))) {
+	while ((sz = fread(&ram[pos], 1, 4096, fh))) {
 		pos += sz;
 		if (pos > end)
 			fail("load: image too large");
@@ -180,7 +180,7 @@ static void load(const char *type,
 /* main program */
 int main(int argc, char **argv)
 {
-	static const size_t dtboff = MEMOFF + MEMSIZE - 2048;
+	static const size_t dtboff = MEMOFF + MEMSIZE - 16384;
 	static const size_t rdoff  = MEMOFF + MEMSIZE - 1024*1024;
 
 	/* initialize peripherals */

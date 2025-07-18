@@ -12,7 +12,7 @@
 
 		stdout-path = "/soc/uart@10000000";
 		linux,initrd-start = <0x81f00000>;
-		linux,initrd-end   = <0x81fff800>;
+		linux,initrd-end   = <0x81ffc000>;
 	};
 
 	reserved-memory {
