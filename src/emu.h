@@ -141,6 +141,13 @@ void     clint_free       (struct clint *clint);
 int      clint_read32     (struct clint *clint, uint32_t addr, uint32_t *data);
 int      clint_write32    (struct clint *clint, uint32_t addr, uint32_t  data);
 
+/* plic */
+struct   plic *plic_init(struct cpu *cpu);
+void     plic_free      (struct plic *plic);
+int      plic_read32    (struct plic *plic, uint32_t addr, uint32_t *data);
+int      plic_write32   (struct plic *plic, uint32_t addr, uint32_t  data);
+void     plic_irq       (struct plic *plic, unsigned irq);
+
 /* uart */
 struct   uart *uart_init(struct cpu *cpu);
 void     uart_tick      (struct uart *uart);

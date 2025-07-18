@@ -9,7 +9,7 @@ SIZE    = size
 DTC     = dtc
 
 RVEMU = rvemu
-OBJS  = main.o utils.o cpu.o clint.o uart.o
+OBJS  = main.o utils.o cpu.o clint.o plic.o uart.o
 DTB   = rv32.dtb
 
 .PHONY: all

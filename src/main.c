@@ -18,12 +18,16 @@
 #define SYSCONOFF  0x12000000
 #define SYSCONSIZE 0x00000004
 
+#define PLICOFF  0x20000000
+#define PLICSIZE 0x04000000
+
 /* system devices */
 static struct cpu   *cpu;
 static uint8_t      *ram;
 static struct clint *clint;
 static struct uart  *uart;
 static uint32_t      syscon;
+static struct plic  *plic;
 
 /* system controller callbacks */
 static int syscon_read32(uint32_t addr, uint32_t *data)
@@ -67,6 +71,9 @@ int bus_read32(uint32_t addr, uint32_t *data)
 	if (addr >= SYSCONOFF && addr < SYSCONOFF + SYSCONSIZE - 3)
 		return syscon_read32(addr - SYSCONOFF, data);
 
+	if (addr >= PLICOFF && addr < PLICOFF + PLICSIZE - 3)
+		return plic_read32(plic, addr - PLICOFF, data);
+
 	warn("bus: invalid read32 from %08x", addr);
 	return 1;
 }
@@ -83,6 +90,9 @@ int bus_write32(uint32_t addr, uint32_t data)
 
 	if (addr >= SYSCONOFF && addr < SYSCONOFF + SYSCONSIZE - 3)
 		return syscon_write32(addr - SYSCONOFF, data);
+
+	if (addr >= PLICOFF && addr < PLICOFF + PLICSIZE - 3)
+		return plic_write32(plic, addr - PLICOFF, data);
 
 	warn("bus: invalid write32 to %08x data %08x", addr, data);
 	return 1;
@@ -180,6 +190,8 @@ int main(int argc, char **argv)
 		fail("ram: cannot allocate");
 	if (!(clint = clint_init(cpu)))
 		fail("clint: cannot initialize");
+	if (!(plic = plic_init(cpu)))
+		fail("plic: cannot initialize");
 	if (!(uart = uart_init(cpu)))
 		fail("uart: cannot initialize");
 
