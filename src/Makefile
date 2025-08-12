@@ -3,13 +3,13 @@
 #
 
 CC      = cc
-CFLAGS  = -Wall -Wextra -O3 -g
-LDFLAGS =
+CFLAGS  = -Wall -Wextra -O3 -g $(shell pkg-config --cflags sdl2)
+LDFLAGS = $(shell pkg-config --libs sdl2)
 SIZE    = size
 DTC     = dtc
 
 RVEMU = rvemu
-OBJS  = main.o utils.o cpu.o clint.o plic.o uart.o
+OBJS  = main.o ui.o utils.o cpu.o clint.o plic.o uart.o
 DTB   = rv32.dtb
 
 .PHONY: all

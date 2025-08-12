@@ -113,6 +113,16 @@ enum rv_csr {
 	/* ... */
 };
 
+/* user interface */
+struct   ui *ui_init   (void);
+void     ui_free       (struct ui *ui);
+void     ui_tick       (struct ui *ui);
+void     ui_fb_getsize (struct ui *ui, uint32_t *width, uint32_t *height);
+void     ui_fb_setbuf  (struct ui *ui, uint32_t *buf);
+void     ui_fb_update  (struct ui *ui);
+void     ui_kb_setcb   (struct ui *ui, void *ctx,
+                        void (*callback)(void *ctx, uint32_t key));
+
 /* risc-v processor */
 struct   cpu *cpu_init(void);
 void     cpu_free     (struct cpu *cpu);

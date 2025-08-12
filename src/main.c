@@ -21,6 +21,9 @@
 #define PLICOFF  0x20000000
 #define PLICSIZE 0x04000000
 
+/* user interface */
+static struct ui *ui;
+
 /* system devices */
 static struct cpu   *cpu;
 static uint8_t      *ram;
@@ -183,6 +186,10 @@ int main(int argc, char **argv)
 	static const size_t dtboff = MEMOFF + MEMSIZE - 16384;
 	static const size_t rdoff  = MEMOFF + MEMSIZE - 1024*1024;
 
+	/* initialize ui */
+	if (!(ui = ui_init()))
+		warn("ui: failed to initialize");
+
 	/* initialize peripherals */
 	if (!(cpu = cpu_init()))
 		fail("cpu: cannot initialize");
@@ -210,6 +217,9 @@ res:	memset(ram, 0, MEMSIZE);
 	info("cpu: start");
 	syscon = 0;
 	while (syscon == 0) {
+		/* tick user interface */
+		ui_tick(ui);
+
 		/* tick hardware */
 		clint_tick(clint);
 		uart_tick(uart);
