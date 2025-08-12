@@ -107,5 +107,15 @@
 			reg = <0x12000000 0x00000004>;
 			status = "ok";
 		};
+
+		display: framebuffer@13000000 {
+			compatible = "simple-framebuffer";
+			reg = <0x13000000 (800 * 600 * 4)>;
+			format = "a8b8g8r8";
+			stride = <(800 * 4)>;
+			width  = <800>;
+			height = <600>;
+			status = "ok";
+		};
 	};
 };

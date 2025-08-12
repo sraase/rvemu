@@ -18,6 +18,9 @@
 #define SYSCONOFF  0x12000000
 #define SYSCONSIZE 0x00000004
 
+#define DISPLAYOFF  0x13000000
+#define DISPLAYSIZE 0x02000000
+
 #define PLICOFF  0x20000000
 #define PLICSIZE 0x04000000
 
@@ -31,6 +34,7 @@ static struct clint *clint;
 static struct uart  *uart;
 static uint32_t      syscon;
 static struct plic  *plic;
+static struct display *display;
 
 /* system controller callbacks */
 static int syscon_read32(uint32_t addr, uint32_t *data)
@@ -74,6 +78,9 @@ int bus_read32(uint32_t addr, uint32_t *data)
 	if (addr >= SYSCONOFF && addr < SYSCONOFF + SYSCONSIZE - 3)
 		return syscon_read32(addr - SYSCONOFF, data);
 
+	if (addr >= DISPLAYOFF && addr < DISPLAYOFF + DISPLAYSIZE - 3)
+		return display_read32(display, addr - DISPLAYOFF, data);
+
 	if (addr >= PLICOFF && addr < PLICOFF + PLICSIZE - 3)
 		return plic_read32(plic, addr - PLICOFF, data);
 
@@ -93,6 +100,9 @@ int bus_write32(uint32_t addr, uint32_t data)
 
 	if (addr >= SYSCONOFF && addr < SYSCONOFF + SYSCONSIZE - 3)
 		return syscon_write32(addr - SYSCONOFF, data);
+
+	if (addr >= DISPLAYOFF && addr < DISPLAYOFF + DISPLAYSIZE - 3)
+		return display_write32(display, addr - DISPLAYOFF, data);
 
 	if (addr >= PLICOFF && addr < PLICOFF + PLICSIZE - 3)
 		return plic_write32(plic, addr - PLICOFF, data);
@@ -201,6 +211,8 @@ int main(int argc, char **argv)
 		fail("plic: cannot initialize");
 	if (!(uart = uart_init(plic, 1)))
 		fail("uart: cannot initialize");
+	if (!(display = display_init(ui)))
+		fail("display: cannot initialize");
 
 	/* load memory */
 res:	memset(ram, 0, MEMSIZE);

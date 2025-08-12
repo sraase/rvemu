@@ -165,6 +165,12 @@ void     uart_free      (struct uart *uart);
 int      uart_read8     (struct uart *uart, uint32_t addr, uint8_t *data);
 int      uart_write8    (struct uart *uart, uint32_t addr, uint8_t  data);
 
+/* display */
+struct   display *display_init(struct ui *ui);
+void     display_free         (struct display *display);
+int      display_read32       (struct display *display, uint32_t addr, uint32_t *data);
+int      display_write32      (struct display *display, uint32_t addr, uint32_t  data);
+
 /* utility */
 uint32_t gettime_us(void);
 
