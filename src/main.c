@@ -201,7 +201,7 @@ int main(int argc, char **argv)
 		warn("ui: failed to initialize");
 
 	/* initialize peripherals */
-	if (!(cpu = cpu_init()))
+	if (!(cpu = cpu_init(0)))
 		fail("cpu: cannot initialize");
 	if (!(ram = malloc(MEMSIZE)))
 		fail("ram: cannot allocate");

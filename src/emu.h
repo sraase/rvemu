@@ -124,7 +124,7 @@ void     ui_kb_setcb   (struct ui *ui, void *ctx,
                         void (*callback)(void *ctx, uint32_t key));
 
 /* risc-v processor */
-struct   cpu *cpu_init(void);
+struct   cpu *cpu_init(uint32_t id);
 void     cpu_free     (struct cpu *cpu);
 void     cpu_reset    (struct cpu *cpu, uint32_t entry);
 int      cpu_run      (struct cpu *cpu, unsigned cycles);

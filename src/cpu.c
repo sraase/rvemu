@@ -26,6 +26,7 @@ struct cpu {
 	uint32_t flags;
 	uint32_t lrsc;
 	uint32_t trap;
+	uint32_t hartid;
 
 	uint32_t mstatus;
 	uint32_t mie;
@@ -113,7 +114,7 @@ int cpu_run(struct cpu *cpu, unsigned cycles)
 			cpu->mtval = cpu->pc;
 			goto trap;
 		}
-//fprintf(stderr, "trace pc %08x instr %08x cycle %08x%08x regs x0 %08x ra %08x sp %08x gp %08x tp %08x t0 %08x t1 %08x t2 %08x s0 %08x s1 %08x a0 %08x a1 %08x a2 %08x a3 %08x a4 %08x a5 %08x a6 %08x a7 %08x s2 %08x s3 %08x s4 %08x s5 %08x s6 %08x s7 %08x s8 %08x s9 %08x s10 %08x s11 %08x t3 %08x t4 %08x t5 %08x t6 %08x\r\n", cpu->pc, instr, cpu->cycles[1], cpu->cycles[0], cpu->regs[0], cpu->regs[1], cpu->regs[2], cpu->regs[3], cpu->regs[4], cpu->regs[5], cpu->regs[6], cpu->regs[7], cpu->regs[8], cpu->regs[9], cpu->regs[10], cpu->regs[11], cpu->regs[12], cpu->regs[13], cpu->regs[14], cpu->regs[15], cpu->regs[16], cpu->regs[17], cpu->regs[18], cpu->regs[19], cpu->regs[20], cpu->regs[21], cpu->regs[22], cpu->regs[23], cpu->regs[24], cpu->regs[25], cpu->regs[26], cpu->regs[27], cpu->regs[28], cpu->regs[29], cpu->regs[30], cpu->regs[31]);
+//fprintf(stderr, "trace %02u pc %08x instr %08x cycle %08x%08x regs x0 %08x ra %08x sp %08x gp %08x tp %08x t0 %08x t1 %08x t2 %08x s0 %08x s1 %08x a0 %08x a1 %08x a2 %08x a3 %08x a4 %08x a5 %08x a6 %08x a7 %08x s2 %08x s3 %08x s4 %08x s5 %08x s6 %08x s7 %08x s8 %08x s9 %08x s10 %08x s11 %08x t3 %08x t4 %08x t5 %08x t6 %08x\r\n", cpu->hartid, cpu->pc, instr, cpu->cycles[1], cpu->cycles[0], cpu->regs[0], cpu->regs[1], cpu->regs[2], cpu->regs[3], cpu->regs[4], cpu->regs[5], cpu->regs[6], cpu->regs[7], cpu->regs[8], cpu->regs[9], cpu->regs[10], cpu->regs[11], cpu->regs[12], cpu->regs[13], cpu->regs[14], cpu->regs[15], cpu->regs[16], cpu->regs[17], cpu->regs[18], cpu->regs[19], cpu->regs[20], cpu->regs[21], cpu->regs[22], cpu->regs[23], cpu->regs[24], cpu->regs[25], cpu->regs[26], cpu->regs[27], cpu->regs[28], cpu->regs[29], cpu->regs[30], cpu->regs[31]);
 		if ((instr & 0x03) != 0x03) {
 			warn("cpu: compressed instruction %08x",
 				instr, cpu->pc);
@@ -781,7 +782,7 @@ uint32_t cpu_csr_get(struct cpu *cpu, enum rv_csr csr)
 	case CSR_MVENDORID:  return 0x00000000; /* not implemented */
 	case CSR_MARCHID:    return 0x00000000; /* not implemented */
 	case CSR_MIMPID:     return 0x00000000; /* not implemented */
-	case CSR_MHARTID:    return 0x00000000; /* single/only core */
+	case CSR_MHARTID:    return cpu->hartid;
 	case CSR_MCONFIGPTR: return 0x00000000; /* not implemented */
 	case CSR_PMPCFG0:    return 0x00000000; /* not implemented */
 	case CSR_PMPADDR0:   return 0x00000000; /* not implemented */
@@ -822,8 +823,10 @@ uint32_t cpu_reg_get(struct cpu *cpu, enum rv_reg reg)
 /* reset cpu */
 void cpu_reset(struct cpu *cpu, uint32_t entry)
 {
+	uint32_t hartid = cpu->hartid;
 	memset(cpu, 0, sizeof(struct cpu));
 	cpu->flags |= FLAG_PRIV; /* M mode */
+	cpu->hartid = hartid;
 	cpu->pc = entry;
 }
 
@@ -835,10 +838,11 @@ void cpu_free(struct cpu *cpu)
 }
 
 /* initialize a cpu instance */
-struct cpu *cpu_init(void)
+struct cpu *cpu_init(uint32_t id)
 {
 	struct cpu *cpu = malloc(sizeof(struct cpu));
 	if (cpu) {
+		cpu->hartid = id;
 		cpu_reset(cpu, 0);
 	}
 	return cpu;
