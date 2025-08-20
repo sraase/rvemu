@@ -31,7 +31,7 @@
 		#size-cells = <0>;
 		timebase-frequency = <1000000>;
 
-		cpu: cpu@0 {
+		cpu0: cpu@0 {
 			device_type = "cpu";
 			compatible = "riscv";
 			reg = <0>;
@@ -41,7 +41,7 @@
 			status = "ok";
 
 			/* interrupts: 3 (software) 7 (timer) 11 (external) */
-			cpu_intc: interrupt-controller {
+			cpu0_intc: interrupt-controller {
 				#interrupt-cells = <1>;
 				interrupt-controller;
 				compatible = "riscv,cpu-intc";
@@ -51,7 +51,7 @@
 		cpu-map {
 			cluster0 {
 				core0 {
-					cpu0 = &cpu;
+					cpu = <&cpu0>;
 				};
 			};
 		};
@@ -80,7 +80,7 @@
 		clint: clint@11000000 {
 			compatible = "sifive,clint0", "riscv,clint0";
 			reg = <0x11000000 0x00010000>;
-			interrupts-extended = <&cpu_intc 3 &cpu_intc 7>;
+			interrupts-extended = <&cpu0_intc 3 &cpu0_intc 7>;
 			status = "ok";
 		};
 
@@ -89,7 +89,7 @@
 			interrupt-controller;
 			compatible = "sifive,plic-1.0.0", "riscv,plic0";
 			reg = <0x20000000 0x04000000>;
-			interrupts-extended = <&cpu_intc 11>;
+			interrupts-extended = <&cpu0_intc 11>;
 			riscv,ndev = <31>;
 			status = "ok";
 		};
