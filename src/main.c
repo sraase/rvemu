@@ -28,7 +28,7 @@
 static struct ui *ui;
 
 /* system devices */
-static struct cpu   *cpu;
+static struct cpu   *cpus[2];
 static uint8_t      *ram;
 static struct clint *clint;
 static struct uart  *uart;
@@ -208,13 +208,15 @@ int main(int argc, char **argv)
 		warn("ui: failed to initialize");
 
 	/* initialize devices */
-	if (!(cpu = cpu_init(0)))
-		fail("cpu: cannot initialize");
+	for (size_t i = 0; i < sizeof(cpus)/sizeof(cpus[0]); i++) {
+		if (!(cpus[i] = cpu_init(i)))
+			fail("cpu%d: cannot initialize", i);
+	}
 	if (!(ram = malloc(MEMSIZE)))
 		fail("ram: cannot allocate");
-	if (!(clint = clint_init(&cpu, 1)))
+	if (!(clint = clint_init(cpus, sizeof(cpus)/sizeof(cpus[0]))))
 		fail("clint: cannot initialize");
-	if (!(plic = plic_init(cpu)))
+	if (!(plic = plic_init(cpus[0])))
 		fail("plic: cannot initialize");
 	if (!(uart = uart_init(plic, 1)))
 		fail("uart: cannot initialize");
@@ -235,13 +237,15 @@ res:	memset(ram, 0, MEMSIZE);
 	if (argc > 2) load("dtb",    argv[2], dtboff, MEMOFF+MEMSIZE);
 	if (argc > 3) load("initrd", argv[3], rdoff,  dtboff);
 
-	/* reset cpu */
-	cpu_reset(cpu, MEMOFF);
-	cpu_reg_set(cpu, REG_A0, cpu_csr_get(cpu, CSR_MHARTID));
-	cpu_reg_set(cpu, REG_A1, dtboff);
+	/* reset cpus */
+	for (size_t i = 0; i < sizeof(cpus)/sizeof(cpus[0]); i++) {
+		cpu_reset(cpus[i], MEMOFF);
+		cpu_reg_set(cpus[i], REG_A0, cpu_csr_get(cpus[i], CSR_MHARTID));
+		cpu_reg_set(cpus[i], REG_A1, dtboff);
+	}
 
 	/* main loop */
-	info("cpu: start");
+	info("cpus: start");
 	syscon = 0;
 	while (syscon == 0) {
 		/* tick user interface */
@@ -251,8 +255,13 @@ res:	memset(ram, 0, MEMSIZE);
 		clint_tick(clint);
 		uart_tick(uart);
 
-		/* run cpu */
-		switch (cpu_run(cpu, 1024)) {
+		/* run cpus */
+		int ret = 1;
+
+		for (size_t i = 0; i < sizeof(cpus)/sizeof(cpus[0]); i++)
+			ret &= cpu_run(cpus[i], 1024);
+
+		switch (ret) {
 		case 0: /* nothing */ break;
 		case 1: usleep(100);  break;
 		}
@@ -265,7 +274,8 @@ res:	memset(ram, 0, MEMSIZE);
 	uart_free(uart);
 	clint_free(clint);
 	free(ram);
-	cpu_free(cpu);
+	for (size_t i = 0; i < sizeof(cpus)/sizeof(cpus[0]); i++)
+		cpu_free(cpus[i]);
 
 	return 0;
 }

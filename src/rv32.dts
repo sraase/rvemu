@@ -48,10 +48,31 @@
 			};
 		};
 
+		cpu1: cpu@1 {
+			device_type = "cpu";
+			compatible = "riscv";
+			reg = <1>;
+			mmu-type = "riscv,none";
+			riscv,isa-base = "rv32i";
+			riscv,isa-extensions = "i", "m", "a", "zicsr", "zifencei";
+			status = "ok";
+
+			/* interrupts: 3 (software) 7 (timer) 11 (external) */
+			cpu1_intc: interrupt-controller {
+				#interrupt-cells = <1>;
+				interrupt-controller;
+				compatible = "riscv,cpu-intc";
+			};
+		};
+
 		cpu-map {
 			cluster0 {
 				core0 {
 					cpu = <&cpu0>;
+				};
+
+				core1 {
+					cpu = <&cpu1>;
 				};
 			};
 		};
@@ -80,7 +101,8 @@
 		clint: clint@11000000 {
 			compatible = "sifive,clint0", "riscv,clint0";
 			reg = <0x11000000 0x00010000>;
-			interrupts-extended = <&cpu0_intc 3 &cpu0_intc 7>;
+			interrupts-extended = <&cpu0_intc 3 &cpu0_intc 7>,
+			                      <&cpu1_intc 3 &cpu1_intc 7>;
 			status = "ok";
 		};
 
