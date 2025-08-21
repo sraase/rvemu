@@ -165,7 +165,7 @@ int      bus_write_conditional32(uint32_t addr, uint32_t data,
 
 /* clint */
 extern   struct bus_ops clint_ops;
-struct   clint *clint_init(struct cpu *cpu);
+struct   clint *clint_init(struct cpu **cpu, size_t num_cpus);
 void     clint_tick       (struct clint *clint);
 void     clint_free       (struct clint *clint);
 

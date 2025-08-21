@@ -212,7 +212,7 @@ int main(int argc, char **argv)
 		fail("cpu: cannot initialize");
 	if (!(ram = malloc(MEMSIZE)))
 		fail("ram: cannot allocate");
-	if (!(clint = clint_init(cpu)))
+	if (!(clint = clint_init(&cpu, 1)))
 		fail("clint: cannot initialize");
 	if (!(plic = plic_init(cpu)))
 		fail("plic: cannot initialize");
