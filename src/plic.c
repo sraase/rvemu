@@ -21,8 +21,10 @@ static void plic_update(struct plic *plic)
 	else                               cpu_irq_clear(plic->cpu, 11);
 }
 
-int plic_read32(struct plic *plic, uint32_t addr, uint32_t *data)
+static int plic_read32(void *ctx, uint32_t addr, uint32_t *data)
 {
+	struct plic *plic = (struct plic *)ctx;
+
 	/* interrupt source priority */
 	if      (addr <= 0x000000) *data = 0;
 	else if (addr <= 0x00007C) *data = 1;
@@ -57,8 +59,10 @@ claim:
 	return 0;
 }
 
-int plic_write32(struct plic *plic, uint32_t addr, uint32_t data)
+static int plic_write32(void *ctx, uint32_t addr, uint32_t data)
 {
+	struct plic *plic = (struct plic *)ctx;
+
 	/* interrupt source priority */
 	if      (addr <= 0x000000) (void)data;
 	else if (addr <= 0x00007C) (void)data;
@@ -94,6 +98,11 @@ complete:
 	}
 	return 0;
 }
+
+struct bus_ops plic_ops = {
+	.read32  = plic_read32,
+	.write32 = plic_write32,
+};
 
 void plic_irq(struct plic *plic, unsigned irq)
 {

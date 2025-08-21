@@ -113,6 +113,16 @@ enum rv_csr {
 	/* ... */
 };
 
+/* bus operations */
+struct bus_ops {
+	int (*read32) (void *ctx, uint32_t addr, uint32_t *data);
+	int (*write32)(void *ctx, uint32_t addr, uint32_t  data);
+	int (*read16) (void *ctx, uint32_t addr, uint16_t *data);
+	int (*write16)(void *ctx, uint32_t addr, uint16_t  data);
+	int (*read8)  (void *ctx, uint32_t addr, uint8_t  *data);
+	int (*write8) (void *ctx, uint32_t addr, uint8_t   data);
+};
+
 /* user interface */
 struct   ui *ui_init   (void);
 void     ui_free       (struct ui *ui);
@@ -137,6 +147,8 @@ void     cpu_irq_set  (struct cpu *cpu, unsigned irq);
 void     cpu_irq_clear(struct cpu *cpu, unsigned irq);
 
 /* system bus */
+void     bus_attach (uint32_t start, uint32_t size,
+                     struct bus_ops *ops, void *ctx);
 int      bus_read32 (uint32_t addr, uint32_t *data);
 int      bus_write32(uint32_t addr, uint32_t  data);
 int      bus_read16 (uint32_t addr, uint16_t *data);
@@ -145,31 +157,27 @@ int      bus_read8  (uint32_t addr, uint8_t  *data);
 int      bus_write8 (uint32_t addr, uint8_t   data);
 
 /* clint */
+extern   struct bus_ops clint_ops;
 struct   clint *clint_init(struct cpu *cpu);
 void     clint_tick       (struct clint *clint);
 void     clint_free       (struct clint *clint);
-int      clint_read32     (struct clint *clint, uint32_t addr, uint32_t *data);
-int      clint_write32    (struct clint *clint, uint32_t addr, uint32_t  data);
 
 /* plic */
+extern   struct bus_ops plic_ops;
 struct   plic *plic_init(struct cpu *cpu);
 void     plic_free      (struct plic *plic);
-int      plic_read32    (struct plic *plic, uint32_t addr, uint32_t *data);
-int      plic_write32   (struct plic *plic, uint32_t addr, uint32_t  data);
 void     plic_irq       (struct plic *plic, unsigned irq);
 
 /* uart */
+extern   struct bus_ops uart_ops;
 struct   uart *uart_init(struct plic *plic, unsigned irq);
 void     uart_tick      (struct uart *uart);
 void     uart_free      (struct uart *uart);
-int      uart_read8     (struct uart *uart, uint32_t addr, uint8_t *data);
-int      uart_write8    (struct uart *uart, uint32_t addr, uint8_t  data);
 
 /* display */
+extern   struct bus_ops display_ops;
 struct   display *display_init(struct ui *ui);
 void     display_free         (struct display *display);
-int      display_read32       (struct display *display, uint32_t addr, uint32_t *data);
-int      display_write32      (struct display *display, uint32_t addr, uint32_t  data);
 
 /* utility */
 uint32_t gettime_us(void);

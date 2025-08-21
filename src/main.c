@@ -37,22 +37,26 @@ static struct plic  *plic;
 static struct display *display;
 
 /* system controller callbacks */
-static int syscon_read32(uint32_t addr, uint32_t *data)
+static int syscon_read32(void *ctx, uint32_t addr, uint32_t *data)
 {
-	*data = 0;
+	uint32_t *syscon = (uint32_t *)ctx;
+
+	*data = *syscon;
 	info("syscon: read %08x", addr);
 	return 0;
 }
 
-static int syscon_write32(uint32_t addr, uint32_t data)
+static int syscon_write32(void *ctx, uint32_t addr, uint32_t data)
 {
+	uint32_t *syscon = (uint32_t *)ctx;
+
 	switch (data) {
 	case 0xACDC0FF0: /* AC/DC OFF */
-		syscon = 1;
+		*syscon = 1;
 		break;
 
 	case 0xC01DB001: /* COLD BOOT */
-		syscon = 2;
+		*syscon = 2;
 		break;
 
 	default:
@@ -64,102 +68,62 @@ static int syscon_write32(uint32_t addr, uint32_t data)
 	return 0;
 }
 
-/* system bus callbacks */
-int bus_read32(uint32_t addr, uint32_t *data)
+static struct bus_ops syscon_ops = {
+	.read32  = syscon_read32,
+	.write32 = syscon_write32,
+};
+
+/* memory operations */
+static int ram_read32(void *ctx, uint32_t addr, uint32_t *data)
 {
-	if (addr >= MEMOFF && addr < MEMOFF + MEMSIZE - 3) {
-		*data = *(uint32_t *)&ram[addr - MEMOFF];
-		return 0;
-	}
-
-	if (addr >= CLINTOFF && addr < CLINTOFF + CLINTSIZE - 3)
-		return clint_read32(clint, addr - CLINTOFF, data);
-
-	if (addr >= SYSCONOFF && addr < SYSCONOFF + SYSCONSIZE - 3)
-		return syscon_read32(addr - SYSCONOFF, data);
-
-	if (addr >= DISPLAYOFF && addr < DISPLAYOFF + DISPLAYSIZE - 3)
-		return display_read32(display, addr - DISPLAYOFF, data);
-
-	if (addr >= PLICOFF && addr < PLICOFF + PLICSIZE - 3)
-		return plic_read32(plic, addr - PLICOFF, data);
-
-	warn("bus: invalid read32 from %08x", addr);
-	return 1;
+	uint8_t *ram = (uint8_t *)ctx;
+	*data = *(uint32_t *)&ram[addr];
+	return 0;
 }
 
-int bus_write32(uint32_t addr, uint32_t data)
+static int ram_write32(void *ctx, uint32_t addr, uint32_t data)
 {
-	if (addr >= MEMOFF && addr < MEMOFF + MEMSIZE - 3) {
-		*(uint32_t *)&ram[addr - MEMOFF] = data;
-		return 0;
-	}
-
-	if (addr >= CLINTOFF && addr < CLINTOFF + CLINTSIZE - 3)
-		return clint_write32(clint, addr - CLINTOFF, data);
-
-	if (addr >= SYSCONOFF && addr < SYSCONOFF + SYSCONSIZE - 3)
-		return syscon_write32(addr - SYSCONOFF, data);
-
-	if (addr >= DISPLAYOFF && addr < DISPLAYOFF + DISPLAYSIZE - 3)
-		return display_write32(display, addr - DISPLAYOFF, data);
-
-	if (addr >= PLICOFF && addr < PLICOFF + PLICSIZE - 3)
-		return plic_write32(plic, addr - PLICOFF, data);
-
-	warn("bus: invalid write32 to %08x data %08x", addr, data);
-	return 1;
+	uint8_t *ram = (uint8_t *)ctx;
+	*(uint32_t *)&ram[addr] = data;
+	return 0;
 }
 
-int bus_read16(uint32_t addr, uint16_t *data)
+static int ram_read16(void *ctx, uint32_t addr, uint16_t *data)
 {
-	if (addr >= MEMOFF && addr < MEMOFF + MEMSIZE - 1) {
-		*data = *(uint16_t *)&ram[addr - MEMOFF];
-		return 0;
-	}
-
-	warn("bus: invalid read16 from %08x", addr);
-	return 1;
+	uint8_t *ram = (uint8_t *)ctx;
+	*data = *(uint16_t *)&ram[addr];
+	return 0;
 }
 
-int bus_write16(uint32_t addr, uint16_t data)
+static int ram_write16(void *ctx, uint32_t addr, uint16_t data)
 {
-	if (addr >= MEMOFF && addr < MEMOFF + MEMSIZE - 1) {
-		*(uint16_t *)&ram[addr - MEMOFF] = data;
-		return 0;
-	}
-
-	warn("bus: invalid write16 to %08x data %04x", addr, data);
-	return 1;
+	uint8_t *ram = (uint8_t *)ctx;
+	*(uint16_t *)&ram[addr] = data;
+	return 0;
 }
 
-int bus_read8(uint32_t addr, uint8_t *data)
+static int ram_read8(void *ctx, uint32_t addr, uint8_t *data)
 {
-	if (addr >= MEMOFF && addr < MEMOFF + MEMSIZE) {
-		*data = *(uint8_t *)&ram[addr - MEMOFF];
-		return 0;
-	}
-
-	if (addr >= UARTOFF && addr < UARTOFF + UARTSIZE)
-		return uart_read8(uart, addr - UARTOFF, data);
-
-	warn("bus: invalid read8 from %08x", addr);
-	return 1;
+	uint8_t *ram = (uint8_t *)ctx;
+	*data = *(uint8_t *)&ram[addr];
+	return 0;
 }
 
-int bus_write8(uint32_t addr, uint8_t data)
+static int ram_write8(void *ctx, uint32_t addr, uint8_t data)
 {
-	if (addr >= MEMOFF && addr < MEMOFF + MEMSIZE) {
-		*(uint8_t *)&ram[addr - MEMOFF] = data;
-		return 0;
-	}
-
-	if (addr >= UARTOFF && addr < UARTOFF + UARTSIZE)
-		return uart_write8(uart, addr - UARTOFF, data);
-
-	warn("bus: invalid write8 to %08x data %02x", addr, data);
-	return 1;
+	uint8_t *ram = (uint8_t *)ctx;
+	*(uint8_t *)&ram[addr] = data;
+	return 0;
 }
+
+static struct bus_ops ram_ops = {
+	.read32  = ram_read32,
+	.write32 = ram_write32,
+	.read16  = ram_read16,
+	.write16 = ram_write16,
+	.read8   = ram_read8,
+	.write8  = ram_write8,
+};
 
 /* load file into physical memory */
 static void load(const char *type,
@@ -200,7 +164,7 @@ int main(int argc, char **argv)
 	if (!(ui = ui_init()))
 		warn("ui: failed to initialize");
 
-	/* initialize peripherals */
+	/* initialize devices */
 	if (!(cpu = cpu_init(0)))
 		fail("cpu: cannot initialize");
 	if (!(ram = malloc(MEMSIZE)))
@@ -213,6 +177,14 @@ int main(int argc, char **argv)
 		fail("uart: cannot initialize");
 	if (!(display = display_init(ui)))
 		fail("display: cannot initialize");
+
+	/* attach devices */
+	bus_attach(MEMOFF,     MEMSIZE,     &ram_ops,     ram);
+	bus_attach(CLINTOFF,   CLINTSIZE,   &clint_ops,   clint);
+	bus_attach(PLICOFF,    PLICSIZE,    &plic_ops,    plic);
+	bus_attach(UARTOFF,    UARTSIZE,    &uart_ops,    uart);
+	bus_attach(DISPLAYOFF, DISPLAYSIZE, &display_ops, display);
+	bus_attach(SYSCONOFF,  SYSCONSIZE,  &syscon_ops,  &syscon);
 
 	/* load memory */
 res:	memset(ram, 0, MEMSIZE);

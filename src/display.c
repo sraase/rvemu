@@ -9,8 +9,9 @@ struct display {
 	uint32_t bufsize;
 };
 
-int display_write32(struct display *display, uint32_t addr, uint32_t data)
+static int display_write32(void *ctx, uint32_t addr, uint32_t data)
 {
+	struct display *display = (struct display *)ctx;
 	if (addr < display->bufsize) {
 		display->buffer[addr / 4] = data;
 		ui_fb_update(display->ui);
@@ -19,14 +20,20 @@ int display_write32(struct display *display, uint32_t addr, uint32_t data)
 	return 1;
 }
 
-int display_read32(struct display *display, uint32_t addr, uint32_t *data)
+static int display_read32(void *ctx, uint32_t addr, uint32_t *data)
 {
+	struct display *display = (struct display *)ctx;
 	if (addr < display->bufsize) {
 		*data = display->buffer[addr / 4];
 		return 0;
 	}
 	return 1;
 }
+
+struct bus_ops display_ops = {
+	.read32  = display_read32,
+	.write32 = display_write32,
+};
 
 void display_free(struct display *display)
 {

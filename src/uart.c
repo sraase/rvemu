@@ -84,8 +84,10 @@ void term_enter(void)
 	fcntl(STDIN_FILENO, F_SETFL, fl_restore | O_NONBLOCK);
 }
 
-int uart_read8(struct uart *uart, uint32_t addr, uint8_t *data)
+static int uart_read8(void *ctx, uint32_t addr, uint8_t *data)
 {
+	struct uart *uart = (struct uart *)ctx;
+
 	switch (addr) {
 	case 0x00:
 		if (uart->lcr & 0x80) {
@@ -151,8 +153,10 @@ int uart_read8(struct uart *uart, uint32_t addr, uint8_t *data)
 	return 0;
 }
 
-int uart_write8(struct uart *uart, uint32_t addr, uint8_t data)
+static int uart_write8(void *ctx, uint32_t addr, uint8_t data)
 {
+	struct uart *uart = (struct uart *)ctx;
+
 	switch (addr) {
 	case 0x00:
 		if (uart->lcr & 0x80) {
@@ -215,6 +219,11 @@ int uart_write8(struct uart *uart, uint32_t addr, uint8_t data)
 	uart_tick(uart);
 	return 0;
 }
+
+struct bus_ops uart_ops = {
+	.read8  = uart_read8,
+	.write8 = uart_write8,
+};
 
 void uart_tick(struct uart *uart)
 {

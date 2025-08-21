@@ -10,8 +10,9 @@ struct clint {
 	uint64_t timecmp;
 };
 
-int clint_read32(struct clint *clint, uint32_t addr, uint32_t *data)
+static int clint_read32(void *ctx, uint32_t addr, uint32_t *data)
 {
+	struct clint *clint = (struct clint *)ctx;
 	switch (addr) {
 	case 0x0000:
 		*data = !!cpu_irq_get(clint->cpu, 3);
@@ -41,8 +42,9 @@ int clint_read32(struct clint *clint, uint32_t addr, uint32_t *data)
 	return 0;
 }
 
-int clint_write32(struct clint *clint, uint32_t addr, uint32_t data)
+static int clint_write32(void *ctx, uint32_t addr, uint32_t data)
 {
+	struct clint *clint = (struct clint *)ctx;
 	switch (addr) {
 	case 0x0000:
 		if (data & 1) cpu_irq_set  (clint->cpu, 3);
@@ -65,6 +67,11 @@ int clint_write32(struct clint *clint, uint32_t addr, uint32_t data)
 
 	return 0;
 }
+
+struct bus_ops clint_ops = {
+	.read32  = clint_read32,
+	.write32 = clint_write32,
+};
 
 void clint_tick(struct clint *clint)
 {
