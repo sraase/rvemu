@@ -16,7 +16,6 @@
 /* state flags */
 #define FLAG_PRIV 0x03 /* current privilege level */
 #define FLAG_WFI  0x04 /* waiting for interrupt */
-#define FLAG_LRSC 0x08 /* LR/SC pair active */
 
 /* RISC-V processor */
 struct cpu {
@@ -24,7 +23,6 @@ struct cpu {
 	uint32_t cycles[2];
 	uint32_t pc;
 	uint32_t flags;
-	uint32_t lrsc;
 	uint32_t trap;
 	uint32_t hartid;
 
@@ -292,34 +290,32 @@ int cpu_run(struct cpu *cpu, unsigned cycles)
 			switch (instr >> 27) {
 #if ISA_ZALRSC
 			case 2: /* LR.W */
-				cpu->lrsc = REG_RS1;
-				if (RD) {
+				if (1) {
 					uint32_t data;
-					if (bus_read32(cpu->lrsc, &data)) {
+					if (bus_read_reserved32(REG_RS1, &data, cpu->hartid)) {
 						cpu->trap  = TRAP_LOAD_FAULT;
-						cpu->mtval = cpu->lrsc;
+						cpu->mtval = REG_RS1;
 						goto trap;
 					}
-					REG_RD = data;
+					if (RD) {
+						REG_RD = (int32_t)data;
+					}
 				}
-				cpu->flags |= FLAG_LRSC;
 				break;
 
 			case 3: /* SC.W */
-				if (cpu->flags & FLAG_LRSC &&
-				    cpu->lrsc == REG_RS1) {
-					if (bus_write32(REG_RS1, REG_RS2)) {
+				if (1) {
+					uint32_t success;
+					if (bus_write_conditional32(REG_RS1, REG_RS2,
+					                            cpu->hartid, &success)) {
 						cpu->trap  = TRAP_STORE_FAULT;
 						cpu->mtval = REG_RS1;
 						goto trap;
 					}
-					if (RD)
-						REG_RD = 0;
-				} else {
-					if (RD)
-						REG_RD = 1;
+					if (RD) {
+						REG_RD = (int32_t)success;
+					}
 				}
-				cpu->flags &= ~FLAG_LRSC;
 				break;
 #endif /* ISA_ZALRSC */
 #if ISA_ZAAMO
