@@ -121,6 +121,10 @@ struct bus_ops {
 	int (*write16)(void *ctx, uint32_t addr, uint16_t  data);
 	int (*read8)  (void *ctx, uint32_t addr, uint8_t  *data);
 	int (*write8) (void *ctx, uint32_t addr, uint8_t   data);
+	int (*read_reserved32)(void *ctx,
+		uint32_t addr, uint32_t *data, uint32_t id);
+	int (*write_conditional32)(void *ctx,
+		uint32_t addr, uint32_t data, uint32_t id, uint32_t *success);
 };
 
 /* user interface */
@@ -155,6 +159,9 @@ int      bus_read16 (uint32_t addr, uint16_t *data);
 int      bus_write16(uint32_t addr, uint16_t  data);
 int      bus_read8  (uint32_t addr, uint8_t  *data);
 int      bus_write8 (uint32_t addr, uint8_t   data);
+int      bus_read_reserved32(uint32_t addr, uint32_t *data, uint32_t id);
+int      bus_write_conditional32(uint32_t addr, uint32_t data,
+                                 uint32_t id, uint32_t *success);
 
 /* clint */
 extern   struct bus_ops clint_ops;

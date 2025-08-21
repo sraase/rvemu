@@ -130,3 +130,35 @@ int bus_write8(uint32_t addr, uint8_t data)
 	warn("bus: invalid write8 to %08x data %02x", addr, data);
 	return 1;
 }
+
+int bus_read_reserved32(uint32_t addr, uint32_t *data, uint32_t id)
+{
+	struct bus_device *dev;
+
+	for (dev = bus_devices; dev < ARRAY_END(bus_devices); dev++) {
+		if (addr >= dev->start && addr < dev->end &&
+		    dev->ops && dev->ops->read_reserved32) {
+			return dev->ops->read_reserved32(dev->ctx,
+				addr - dev->start, data, id);
+		}
+	}
+
+	warn("bus: invalid read_reserved32 from %08x", addr);
+	return 1;
+}
+
+int bus_write_conditional32(uint32_t addr, uint32_t data, uint32_t id, uint32_t *success)
+{
+	struct bus_device *dev;
+
+	for (dev = bus_devices; dev < ARRAY_END(bus_devices); dev++) {
+		if (addr >= dev->start && addr < dev->end &&
+		    dev->ops && dev->ops->write_conditional32) {
+			return dev->ops->write_conditional32(dev->ctx,
+				addr - dev->start, data, id, success);
+		}
+	}
+
+	warn("bus: invalid write_conditional32 to %08x data %08x", addr, data);
+	return 1;
+}

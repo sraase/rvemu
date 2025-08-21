@@ -74,6 +74,8 @@ static struct bus_ops syscon_ops = {
 };
 
 /* memory operations */
+static uint32_t ram_reserved_addr[8];
+
 static int ram_read32(void *ctx, uint32_t addr, uint32_t *data)
 {
 	uint8_t *ram = (uint8_t *)ctx;
@@ -116,13 +118,54 @@ static int ram_write8(void *ctx, uint32_t addr, uint8_t data)
 	return 0;
 }
 
+static int ram_read_reserved32(void *ctx,
+	uint32_t addr, uint32_t *data, uint32_t id)
+{
+	uint8_t *ram = (uint8_t *)ctx;
+
+	/* reserve and read */
+	ram_reserved_addr[id] = addr & ~0x3;
+	*data = *(uint32_t *)&ram[addr];
+	return 0;
+}
+
+static int ram_write_conditional32(void *ctx,
+	uint32_t addr, uint32_t data, uint32_t id, uint32_t *success)
+{
+	if (ram_reserved_addr[id] == (addr & ~0x3)) {
+		uint8_t *ram = (uint8_t *)ctx;
+
+		/* reservation valid, success */
+		*(uint32_t *)&ram[addr] = data;
+		*success = 0;
+
+		/* make sure anyone else fails */
+		for (size_t i = 0; i < sizeof(ram_reserved_addr)/sizeof(ram_reserved_addr[0]); i++) {
+			if (ram_reserved_addr[i] == (addr & ~0x03)) {
+				ram_reserved_addr[i] = 0;
+			}
+		}
+
+	} else {
+		/* reservation invalid, fail */
+		*success = 1;
+
+		/* prevent stale reservations */
+		ram_reserved_addr[id] = 0;
+	}
+
+	return 0;
+}
+
 static struct bus_ops ram_ops = {
-	.read32  = ram_read32,
-	.write32 = ram_write32,
-	.read16  = ram_read16,
-	.write16 = ram_write16,
-	.read8   = ram_read8,
-	.write8  = ram_write8,
+	.read32              = ram_read32,
+	.write32             = ram_write32,
+	.read16              = ram_read16,
+	.write16             = ram_write16,
+	.read8               = ram_read8,
+	.write8              = ram_write8,
+	.read_reserved32     = ram_read_reserved32,
+	.write_conditional32 = ram_write_conditional32,
 };
 
 /* load file into physical memory */
