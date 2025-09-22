@@ -108,6 +108,15 @@
 			status = "ok";
 		};
 
+		eth: ethernet@16000000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "opencores,ethoc";
+			reg = <0x16000000 0x0800>;
+			interrupts-extended = <&plic 2>;
+			status = "ok";
+		};
+
 		display: framebuffer@13000000 {
 			compatible = "simple-framebuffer";
 			reg = <0x13000000 (800 * 600 * 4)>;

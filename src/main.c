@@ -21,6 +21,9 @@
 #define DISPLAYOFF  0x13000000
 #define DISPLAYSIZE 0x02000000
 
+#define ETHOFF  0x16000000
+#define ETHSIZE 0x00000800
+
 #define PLICOFF  0x20000000
 #define PLICSIZE 0x04000000
 
@@ -34,6 +37,7 @@ static struct clint *clint;
 static struct uart  *uart;
 static uint32_t      syscon;
 static struct plic  *plic;
+static struct eth   *eth;
 static struct display *display;
 
 /* system controller callbacks */
@@ -218,6 +222,8 @@ int main(int argc, char **argv)
 		fail("plic: cannot initialize");
 	if (!(uart = uart_init(plic, 1)))
 		fail("uart: cannot initialize");
+	if (!(eth = eth_init(plic, 2)))
+		fail("eth: cannot initialize");
 	if (!(display = display_init(ui)))
 		fail("display: cannot initialize");
 
@@ -226,6 +232,7 @@ int main(int argc, char **argv)
 	bus_attach(CLINTOFF,   CLINTSIZE,   &clint_ops,   clint);
 	bus_attach(PLICOFF,    PLICSIZE,    &plic_ops,    plic);
 	bus_attach(UARTOFF,    UARTSIZE,    &uart_ops,    uart);
+	bus_attach(ETHOFF,     ETHSIZE,     &eth_ops,     eth);
 	bus_attach(DISPLAYOFF, DISPLAYSIZE, &display_ops, display);
 	bus_attach(SYSCONOFF,  SYSCONSIZE,  &syscon_ops,  &syscon);
 
@@ -250,6 +257,7 @@ res:	memset(ram, 0, MEMSIZE);
 		/* tick hardware */
 		clint_tick(clint);
 		uart_tick(uart);
+		eth_tick(eth);
 
 		/* run cpu */
 		switch (cpu_run(cpu, 1024)) {

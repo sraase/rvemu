@@ -181,6 +181,11 @@ struct   uart *uart_init(struct plic *plic, unsigned irq);
 void     uart_tick      (struct uart *uart);
 void     uart_free      (struct uart *uart);
 
+/* eth */
+extern   struct bus_ops eth_ops;
+struct   eth *eth_init(struct plic *plic, unsigned irq);
+void     eth_tick     (struct eth *eth);
+
 /* display */
 extern   struct bus_ops display_ops;
 struct   display *display_init(struct ui *ui);
