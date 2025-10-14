@@ -28,7 +28,7 @@
 static struct ui *ui;
 
 /* system devices */
-static struct cpu   *cpus[2];
+static struct cpu   *cpus[4];
 static uint8_t      *ram;
 static struct clint *clint;
 static struct uart  *uart;
