@@ -7,7 +7,7 @@
 #include "emu.h"
 
 #define MEMOFF    0x80000000
-#define MEMSIZE   (32 * 1024 * 1024)
+#define MEMSIZE   (64 * 1024 * 1024)
 
 #define UARTOFF   0x10000000
 #define UARTSIZE  0x00000100
@@ -205,7 +205,7 @@ static void load(const char *type,
 int main(int argc, char **argv)
 {
 	static const size_t dtboff = MEMOFF + MEMSIZE - 16384;
-	static const size_t rdoff  = MEMOFF + MEMSIZE - 1024*1024;
+	static const size_t rdoff  = MEMOFF + MEMSIZE - 2048*1024;
 
 	/* initialize ui */
 	if (!(ui = ui_init()))
