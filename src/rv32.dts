@@ -11,8 +11,8 @@
 		bootargs = "rdinit=/init"; /* earlycon=uart8250,mmio,0x10000000 */
 
 		stdout-path = "/soc/uart@10000000";
-		linux,initrd-start = <0x81f00000>;
-		linux,initrd-end   = <0x81ffc000>;
+		linux,initrd-start = <0x83e00000>;
+		linux,initrd-end   = <0x83ffc000>;
 	};
 
 	reserved-memory {
@@ -23,7 +23,7 @@
 
 	memory@80000000 {
 		device_type = "memory";
-		reg = <0x80000000 0x02000000>;
+		reg = <0x80000000 0x04000000>;
 	};
 
 	cpus {
