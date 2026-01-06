@@ -1,23 +1,57 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <sys/select.h>
+#include <slirp/libvdeslirp.h>
+
 #include "emu.h"
 
 /**
- * This is a packet interface.
+ * This is a vdeslirp backend.
  */
-static void pkt_send(uint8_t *buf, unsigned len)
+static int pkt_init(struct vdeslirp **slirp)
 {
-	for (unsigned i = 0; i < len; i += 8) {
-		debug("eth: tx %02x %02x %02x %02x %02x %02x %02x %02x",
-			buf[i+0], buf[i+1], buf[i+2], buf[i+3],
-			buf[i+4], buf[i+5], buf[i+6], buf[i+7]);
-	}
+	SlirpConfig cfg;
+
+	vdeslirp_init(&cfg, VDE_INIT_DEFAULT);
+
+	*slirp = vdeslirp_open(&cfg);
+	if (!*slirp)
+		fail("pkt: cannot open slirp");
+
+	return 0;
 }
 
-static unsigned pkt_recv(uint8_t *buf, unsigned len)
+static void pkt_send(struct vdeslirp *slirp, uint8_t *buf, unsigned len)
 {
-	/* no packet */
+	ssize_t r = vdeslirp_send(slirp, buf, len);
+	if (r != len)
+		warn("pkt: sent %zd instead of %u", r, len);
+}
+
+static unsigned pkt_recv(struct vdeslirp *slirp, uint8_t *buf, unsigned len)
+{
+	ssize_t r;
+	int fd;
+	fd_set fds;
+	struct timeval tv;
+
+	fd = vdeslirp_fd(slirp);
+	FD_ZERO(&fds);
+	FD_SET(fd, &fds);
+
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
+
+	if (select(fd+1, &fds, NULL, NULL, &tv) == 0)
+		return 0;
+
+	r = vdeslirp_recv(slirp, buf, len);
+	if (r >= 0)
+		return r;
+
+	warn("pkg: recv returned %zd", r);
 	return 0;
 }
 
@@ -150,6 +184,8 @@ struct eth {
 	struct   plic *plic; /* interrupt controller */
 	unsigned irqnum;     /* interrupt number */
 
+	struct   vdeslirp *slirp; /* backend */
+
 	uint32_t regs[ETH_MAX]; /* registers */
 	uint32_t desc[256];     /* descriptors */
 	struct   phy phy;       /* phy */
@@ -232,7 +268,7 @@ static void eth_try_tx(struct eth *eth)
 		}
 		for (unsigned i = desc_len; i < tx_len; ++i)
 			buf[i] = 0;
-		pkt_send(buf, tx_len);
+		pkt_send(eth->slirp, buf, tx_len);
 		free(buf);
 
 		/* update descriptor */
@@ -267,7 +303,7 @@ static void eth_try_rx(struct eth *eth)
 		int miss = 1;
 
 		/* receive packet */
-		if (!(len = pkt_recv(eth->rxbuf, eth->rxlen)))
+		if (!(len = pkt_recv(eth->slirp, eth->rxbuf, eth->rxlen)))
 			break;
 
 		/* address matching */
@@ -508,6 +544,7 @@ struct eth *eth_init(struct plic *plic, unsigned irq)
 	if (eth) {
 		eth->plic   = plic;
 		eth->irqnum = irq;
+		pkt_init(&eth->slirp);
 		eth_reset(eth);
 	}
 	return eth;
