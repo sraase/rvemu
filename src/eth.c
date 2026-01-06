@@ -4,6 +4,24 @@
 #include "emu.h"
 
 /**
+ * This is a packet interface.
+ */
+static void pkt_send(uint8_t *buf, unsigned len)
+{
+	for (unsigned i = 0; i < len; i += 8) {
+		debug("eth: tx %02x %02x %02x %02x %02x %02x %02x %02x",
+			buf[i+0], buf[i+1], buf[i+2], buf[i+3],
+			buf[i+4], buf[i+5], buf[i+6], buf[i+7]);
+	}
+}
+
+static unsigned pkt_recv(uint8_t *buf, unsigned len)
+{
+	/* no packet */
+	return 0;
+}
+
+/**
  * This is a partial implementation of the
  * DP83848 10/100 Mb/s Ethernet Physical Layer.
  */
@@ -133,8 +151,23 @@ struct eth {
 	unsigned irqnum;     /* interrupt number */
 
 	uint32_t regs[ETH_MAX]; /* registers */
+	uint32_t desc[256];     /* descriptors */
 	struct   phy phy;       /* phy */
+
+	uint8_t  *rxbuf;  /* rx packet buffer */
+	unsigned rxlen;   /* rx buffer size */
+
+	unsigned tx_desc; /* current tx descriptor */
+	unsigned rx_desc; /* current rx descriptor */
 };
+
+static void eth_realloc(struct eth *eth)
+{
+	/* reallocate receive buffer for largest possible packet */
+	eth->rxlen = (eth->regs[ETH_MODER] & 0x4000) ? 65536 :
+		eth->regs[ETH_PACKETLEN] & 0xFFFF;
+	eth->rxbuf = realloc(eth->rxbuf, eth->rxlen);
+}
 
 static void eth_reset(struct eth *eth)
 {
@@ -149,6 +182,10 @@ static void eth_reset(struct eth *eth)
 	eth->regs[ETH_MIIMODER]  = 0x00000064;
 	eth->regs[ETH_MAC_ADDR0] = 0x00123456;
 	eth->regs[ETH_MAC_ADDR1] = 0x00005254;
+	eth_realloc(eth);
+
+	eth->tx_desc = 0;
+	eth->rx_desc = 2 * eth->regs[ETH_TX_BD_NUM];
 
 	phy_reset(&eth->phy);
 	phy_set_link(&eth->phy, 1);
@@ -161,6 +198,154 @@ static void eth_irq(struct eth *eth)
 
 	if (eth->plic && (source & mask))
 		plic_irq(eth->plic, eth->irqnum);
+}
+
+static void eth_try_tx(struct eth *eth)
+{
+	while((eth->regs[ETH_MODER] & 0x0002)    &&    /* Tx enabled  */
+	      (eth->regs[ETH_TX_BD_NUM] > 0)     &&    /* desc exists */
+	      (eth->desc[eth->tx_desc] & 0x8000) &&    /* desc valid  */
+	      ((eth->desc[eth->tx_desc] >> 16) > 4)) { /* min length  */
+		unsigned minfl    = eth->regs[ETH_PACKETLEN] >> 16;
+		unsigned maxfl    = eth->regs[ETH_PACKETLEN] & 0xFFFF;
+		unsigned desc_len = eth->desc[eth->tx_desc] >> 16;
+		unsigned desc_flg = eth->desc[eth->tx_desc] & 0xFFFF;
+		unsigned desc_ptr = eth->desc[eth->tx_desc + 1];
+		unsigned tx_len   = desc_len;
+		uint8_t  *buf;
+
+		/* set packet length */
+		if ((eth->regs[ETH_MODER] & 0x8000) && (tx_len < minfl))
+			tx_len = minfl;
+		if (!(eth->regs[ETH_MODER] & 0x4000) && (tx_len > maxfl))
+			tx_len = maxfl;
+		if (desc_len > tx_len)
+			desc_len = tx_len;
+
+		/* allocate, fill, zero-pad, send and free transmit buffer */
+		buf = malloc(tx_len);
+		for (unsigned i = 0; i < desc_len; ++i) {
+			if (bus_read8(desc_ptr + i, &buf[i]))
+				fail("eth: DMA fault during transmit");
+		}
+		for (unsigned i = desc_len; i < tx_len; ++i)
+			buf[i] = 0;
+		pkt_send(buf, tx_len);
+		free(buf);
+
+		/* update descriptor */
+		eth->desc[eth->tx_desc] &= 0xFFFF7800;
+
+		/* next descriptor */
+		if (desc_flg & 0x2000) {
+			eth->tx_desc = 0;
+		} else {
+			eth->tx_desc += 2;
+			if (eth->tx_desc >= 2 * eth->regs[ETH_TX_BD_NUM])
+				eth->tx_desc = 0;
+		}
+
+		/* trigger interrupt */
+		if (desc_flg & 0x4000) {
+			eth->regs[ETH_INT_SOURCE] |= 0x0001;
+			eth_irq(eth);
+		}
+	}
+}
+
+static void eth_try_rx(struct eth *eth)
+{
+	while ((eth->regs[ETH_MODER] & 0x0001) &&    /* Rx enabled  */
+	       (eth->regs[ETH_TX_BD_NUM] < 0x80)) {  /* desc exists */
+		unsigned minfl    = eth->regs[ETH_PACKETLEN] >> 16;
+		unsigned maxfl    = eth->regs[ETH_PACKETLEN] & 0xFFFF;
+		unsigned desc_flg = eth->desc[eth->rx_desc] & 0xFFFF;
+		unsigned desc_ptr = eth->desc[eth->rx_desc + 1];
+		unsigned len, rx_len;
+		int miss = 1;
+
+		/* receive packet */
+		if (!(len = pkt_recv(eth->rxbuf, eth->rxlen)))
+			break;
+
+		/* address matching */
+		if (len >= 6) {
+			if (!(eth->regs[ETH_MODER] & 0x0008)     &&
+			    (eth->rxbuf[0] == 0xFF) && (eth->rxbuf[1] == 0xFF) &&
+			    (eth->rxbuf[2] == 0xFF) && (eth->rxbuf[3] == 0xFF) &&
+			    (eth->rxbuf[4] == 0xFF) && (eth->rxbuf[5] == 0xFF)) {
+				/* broadcast packet */
+				miss = 0;
+			} else if ((eth->regs[ETH_MODER] & 0x0010) ||
+			           (eth->rxbuf[0] & 0x01)) {
+				/* hash or multicast */
+				warn("eth: no multicast or IAM support");
+			} else if ((eth->rxbuf[0] == ((eth->regs[ETH_MAC_ADDR1] >>  8) & 0xFF)) &&
+			           (eth->rxbuf[1] == ((eth->regs[ETH_MAC_ADDR1]      ) & 0xFF)) &&
+			           (eth->rxbuf[2] == ((eth->regs[ETH_MAC_ADDR0] >> 24) & 0xFF)) &&
+			           (eth->rxbuf[3] == ((eth->regs[ETH_MAC_ADDR0] >> 16) & 0xFF)) &&
+			           (eth->rxbuf[4] == ((eth->regs[ETH_MAC_ADDR0] >>  8) & 0xFF)) &&
+			           (eth->rxbuf[5] == ((eth->regs[ETH_MAC_ADDR0]      ) & 0xFF))) {
+				/* targeted packet */
+				miss = 0;
+			}
+		}
+
+		/* drop non-matching unless promiscous mode */
+		if (miss && !(eth->regs[ETH_MODER] & 0x0020))
+			return;
+
+		/* drop and interrupt if descriptor busy */
+		if (!(desc_flg & 0x8000)) {
+			eth->regs[ETH_INT_SOURCE] |= 0x0010;
+			eth_irq(eth);
+			return;
+		}
+
+		/* set packet length */
+		len += 4;
+		rx_len = (eth->regs[ETH_MODER] & 0x4000) ? 65536 : maxfl;
+		if (rx_len > len)
+			rx_len = len;
+		if ((eth->regs[ETH_MODER] & 0x8000) && rx_len < minfl)
+			rx_len = minfl;
+		len -= 4;
+
+		/* write len bytes and zero-pad to rx_len */
+		for (unsigned i = 0; i < len; ++i) {
+			if (bus_write8(desc_ptr + i, eth->rxbuf[i]))
+				fail("eth: DMA fault during receive (data)");
+		}
+		for (unsigned i = len; i < rx_len; ++i) {
+			if (bus_write8(desc_ptr + i, 0))
+				fail("eth: DMA fault during receive (padding)");
+		}
+
+		/* update descriptor */
+		eth->desc[eth->rx_desc] &= 0x00007E00;
+		eth->desc[eth->rx_desc] |= rx_len << 16;
+		if (miss)
+			eth->desc[eth->rx_desc] |= 0x0080;
+//		if (len < min_len)
+//			eth->desc[eth->rx_desc] |= 0x0004;
+		if (len > maxfl)
+			eth->desc[eth->rx_desc] |= 0x0040;
+
+		/* next descriptor */
+		if (desc_flg & 0x2000) {
+			eth->rx_desc = 2 * eth->regs[ETH_TX_BD_NUM];
+		} else {
+			eth->rx_desc += 2;
+			if (eth->rx_desc >= 256)
+				eth->rx_desc = 2 * eth->regs[ETH_TX_BD_NUM];
+		}
+
+		/* trigger interrupt */
+		if (desc_flg & 0x4000) {
+			eth->regs[ETH_INT_SOURCE] |= 0x0002;
+			eth_irq(eth);
+		}
+	}
 }
 
 static int eth_reg_read(struct eth *eth, unsigned reg, uint32_t *data)
@@ -189,6 +374,19 @@ static int eth_reg_write(struct eth *eth, unsigned reg, uint32_t data)
 
 		/* update register */
 		eth->regs[reg] = data;
+
+		/* transmit descriptors start at zero */
+		if (rising & 0x0002) {
+			eth->tx_desc = 0;
+			eth_try_tx(eth);
+		}
+
+		/* receive descriptors follow */
+		if (rising & 0x0001) {
+			eth->rx_desc = 2 * eth->regs[ETH_TX_BD_NUM];
+			eth_try_rx(eth);
+		}
+
 		return 0;
 	}
 	case ETH_INT_SOURCE:
@@ -199,9 +397,14 @@ static int eth_reg_write(struct eth *eth, unsigned reg, uint32_t data)
 		eth->regs[reg] = data;
 		eth_irq(eth);
 		return 0;
+	case ETH_PACKETLEN:
+		eth->regs[reg] = data;
+		eth_realloc(eth);
+		return 0;
 	case ETH_TX_BD_NUM:
 		if (data <= 0x80)
 			eth->regs[ETH_TX_BD_NUM] = data;
+		eth_try_rx(eth);
 		return 0;
 	case ETH_MIICOMMAND:
 	{
@@ -261,6 +464,12 @@ static int eth_read32(void *ctx, uint32_t addr, uint32_t *data)
 	if (addr < 0x0400)
 		return eth_reg_read(eth, addr / 4, data);
 
+	if (addr < 0x0800) {
+		unsigned idx = (addr & 0x03FF) / 4;
+		*data = eth->desc[idx];
+		return 0;
+	}
+
 	return 1;
 }
 
@@ -270,6 +479,13 @@ static int eth_write32(void *ctx, uint32_t addr, uint32_t data)
 
 	if (addr < 0x0400)
 		return eth_reg_write(eth, addr / 4, data);
+
+	if (addr < 0x0800) {
+		unsigned idx = (addr & 0x03FF) / 4;
+		eth->desc[idx] = data;
+		eth_try_tx(eth);
+		return 0;
+	}
 
 	return 1;
 }
@@ -281,6 +497,7 @@ struct bus_ops eth_ops = {
 
 void eth_tick(struct eth *eth)
 {
+	eth_try_rx(eth);
 }
 
 struct eth *eth_init(struct plic *plic, unsigned irq)
