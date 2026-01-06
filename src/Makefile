@@ -3,8 +3,8 @@
 #
 
 CC      = cc
-CFLAGS  = -Wall -Wextra -O3 -g $(shell pkg-config --cflags sdl2)
-LDFLAGS = $(shell pkg-config --libs sdl2)
+CFLAGS  = -Wall -Wextra -O3 -g $(shell pkg-config --cflags sdl2 vdeslirp)
+LDFLAGS = $(shell pkg-config --libs sdl2 vdeslirp)
 SIZE    = size
 DTC     = dtc
 
