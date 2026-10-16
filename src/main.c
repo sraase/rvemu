@@ -76,6 +76,14 @@ static struct bus_ops syscon_ops = {
 /* memory operations */
 static uint32_t ram_reserved_addr[8];
 
+static void ram_unreserve(uint32_t addr)
+{
+	uint32_t word = addr & ~0x3;
+	for (size_t i = 0; i < sizeof(ram_reserved_addr)/sizeof(ram_reserved_addr[0]); i++)
+		if (ram_reserved_addr[i] == word)
+			ram_reserved_addr[i] = 0;
+}
+
 static int ram_read32(void *ctx, uint32_t addr, uint32_t *data)
 {
 	uint8_t *ram = (uint8_t *)ctx;
@@ -86,6 +94,7 @@ static int ram_read32(void *ctx, uint32_t addr, uint32_t *data)
 static int ram_write32(void *ctx, uint32_t addr, uint32_t data)
 {
 	uint8_t *ram = (uint8_t *)ctx;
+	ram_unreserve(addr);
 	*(uint32_t *)&ram[addr] = data;
 	return 0;
 }
@@ -100,6 +109,7 @@ static int ram_read16(void *ctx, uint32_t addr, uint16_t *data)
 static int ram_write16(void *ctx, uint32_t addr, uint16_t data)
 {
 	uint8_t *ram = (uint8_t *)ctx;
+	ram_unreserve(addr);
 	*(uint16_t *)&ram[addr] = data;
 	return 0;
 }
@@ -114,6 +124,7 @@ static int ram_read8(void *ctx, uint32_t addr, uint8_t *data)
 static int ram_write8(void *ctx, uint32_t addr, uint8_t data)
 {
 	uint8_t *ram = (uint8_t *)ctx;
+	ram_unreserve(addr);
 	*(uint8_t *)&ram[addr] = data;
 	return 0;
 }
@@ -136,16 +147,9 @@ static int ram_write_conditional32(void *ctx,
 		uint8_t *ram = (uint8_t *)ctx;
 
 		/* reservation valid, success */
+		ram_unreserve(addr);
 		*(uint32_t *)&ram[addr] = data;
 		*success = 0;
-
-		/* make sure anyone else fails */
-		for (size_t i = 0; i < sizeof(ram_reserved_addr)/sizeof(ram_reserved_addr[0]); i++) {
-			if (ram_reserved_addr[i] == (addr & ~0x03)) {
-				ram_reserved_addr[i] = 0;
-			}
-		}
-
 	} else {
 		/* reservation invalid, fail */
 		*success = 1;
