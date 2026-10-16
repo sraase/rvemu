@@ -615,8 +615,9 @@ int cpu_run(struct cpu *cpu, unsigned cycles)
 				goto trap;
 
 			case 0x10500073: /* WFI */
-				cpu->mstatus |= (1 << 3);
-				cpu->flags   |= FLAG_WFI;
+				/* only sleep if no interrupts pending */
+				if (!(cpu->mie & cpu->mip))
+					cpu->flags |= FLAG_WFI;
 				break;
 
 			case 0x30200073: /* MRET */
