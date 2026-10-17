@@ -5,20 +5,25 @@
 
 /**
  * This is a minimal implementation providing 31 interrupts
- * with fixed hard-wired priorities on a single context.
+ * with fixed hard-wired priorities and one context per CPU.
  */
 
 /* RISC-V Platform Level Interrupt Controller */
 struct plic {
-	struct   cpu *cpu;
+	struct   cpu **cpus;
+	size_t   num_cpus;
 	uint32_t pending;
-	uint32_t enabled;
+	uint32_t enabled[8];
 };
 
 static void plic_update(struct plic *plic)
 {
-	if (plic->pending & plic->enabled) cpu_irq_set  (plic->cpu, 11);
-	else                               cpu_irq_clear(plic->cpu, 11);
+	for (size_t i = 0; i < plic->num_cpus; i++) {
+		if (plic->pending & plic->enabled[i])
+			cpu_irq_set(plic->cpus[i], 11);
+		else
+			cpu_irq_clear(plic->cpus[i], 11);
+	}
 }
 
 static int plic_read32(void *ctx, uint32_t addr, uint32_t *data)
@@ -33,12 +38,38 @@ static int plic_read32(void *ctx, uint32_t addr, uint32_t *data)
 	else if (addr <= 0x001000) *data = plic->pending;
 	else if (addr <= 0x001FFC) goto invalid;
 	/* interrupt enable bits */
-	else if (addr <= 0x002000) *data = plic->enabled;
+	else if (addr <= 0x002400)
+	{
+		if ((addr & 0x3FFC7F) == 0x002000) {
+			*data = plic->enabled[(addr >> 7) & 0x07];
+		} else {
+			goto invalid;
+		}
+	}
 	else if (addr <= 0x1FFFFC) goto invalid;
 	/* threshold/claim */
-	else if (addr <= 0x200000) *data = 0;
-	else if (addr <= 0x200004) goto claim;
-	else                       goto invalid;
+	else if (addr <= 0x208004)
+	{
+		uint32_t off = addr & 0x3F8FFF;
+		if (off == 0x200000) {
+			/* threshold */
+			*data = 0;
+		} else if (off == 0x200004) {
+			/* claim */
+			*data = 0;
+			for (int i = 1; i < 32; ++i) {
+				uint32_t enabled = plic->enabled[(addr >> 12) & 0x07];
+				if (enabled & plic->pending & (1 << i)) {
+					*data = i;
+					break;
+				}
+			}
+		} else {
+			goto invalid;
+		}
+	}
+	else
+		goto invalid;
 
 	return 0;
 
@@ -46,17 +77,6 @@ invalid:
 	/* bus error */
 	warn("plic: invalid addr %08x", addr);
 	return 1;
-
-claim:
-	/* return lowest active interrupt */
-	*data = 0;
-	for (int i = 1; i < 32; ++i) {
-		if (plic->enabled & plic->pending & (1 << i)) {
-			*data = i;
-			break;
-		}
-	}
-	return 0;
 }
 
 static int plic_write32(void *ctx, uint32_t addr, uint32_t data)
@@ -71,12 +91,41 @@ static int plic_write32(void *ctx, uint32_t addr, uint32_t data)
 	else if (addr <= 0x001000) (void)data;
 	else if (addr <= 0x001FFC) goto invalid;
 	/* interrupt enable bits */
-	else if (addr <= 0x002000) plic->enabled = data;
+	else if (addr <= 0x002400)
+	{
+		if ((addr & 0x3FFC7F) == 0x002000) {
+			plic->enabled[(addr >> 7) & 0x07] = data;
+		} else {
+			goto invalid;
+		}
+	}
 	else if (addr <= 0x1FFFFC) goto invalid;
 	/* threshold/claim */
-	else if (addr <= 0x200000) (void)data;
-	else if (addr <= 0x200004) goto complete;
-	else                       goto invalid;
+	else if (addr <= 0x208004)
+	{
+		uint32_t off = addr & 0x3F8FFF;
+		if (off == 0x200000) {
+			/* threshold */
+			(void)data;
+		} else if (off == 0x200004) {
+			/* complete */
+			if (data < 1 || data > 31) {
+				warn("plic: invalid irq %d", data);
+				return 1;
+			}
+
+			/* acknowledge interrupt */
+			if (plic->enabled[(addr >> 12) & 0x07] & (1 << data)) {
+				plic->pending &= ~(1 << data);
+				plic_update(plic);
+			}
+
+		} else {
+			goto invalid;
+		}
+	}
+	else
+		goto invalid;
 
 	return 0;
 
@@ -84,19 +133,6 @@ invalid:
 	/* bus error */
 	warn("plic: invalid addr %08x data %08x", addr, data);
 	return 1;
-
-complete:
-	/* acknowledge specified interrupt */
-	if (data < 1 || data > 31) {
-		warn("plic: invalid irq %d", data);
-		return 1;
-	}
-
-	if (plic->enabled & (1 << data)) {
-		plic->pending &= ~(1 << data);
-		plic_update(plic);
-	}
-	return 0;
 }
 
 struct bus_ops plic_ops = {
@@ -123,11 +159,12 @@ void plic_free(struct plic *plic)
 	return;
 }
 
-struct plic *plic_init(struct cpu *cpu)
+struct plic *plic_init(struct cpu **cpus, size_t num_cpus)
 {
 	struct plic *plic = calloc(1, sizeof(struct plic));
 	if (plic) {
-		plic->cpu = cpu;
+		plic->cpus     = cpus;
+		plic->num_cpus = num_cpus;
 	}
 	return plic;
 }

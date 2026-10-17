@@ -171,7 +171,7 @@ void     clint_free       (struct clint *clint);
 
 /* plic */
 extern   struct bus_ops plic_ops;
-struct   plic *plic_init(struct cpu *cpu);
+struct   plic *plic_init(struct cpu **cpu, size_t num_cpus);
 void     plic_free      (struct plic *plic);
 void     plic_irq       (struct plic *plic, unsigned irq);
 

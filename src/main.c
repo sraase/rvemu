@@ -216,7 +216,7 @@ int main(int argc, char **argv)
 		fail("ram: cannot allocate");
 	if (!(clint = clint_init(cpus, sizeof(cpus)/sizeof(cpus[0]))))
 		fail("clint: cannot initialize");
-	if (!(plic = plic_init(cpus[0])))
+	if (!(plic = plic_init(cpus, sizeof(cpus)/sizeof(cpus[0]))))
 		fail("plic: cannot initialize");
 	if (!(uart = uart_init(plic, 1)))
 		fail("uart: cannot initialize");
