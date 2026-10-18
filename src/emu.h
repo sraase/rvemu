@@ -188,7 +188,7 @@ struct   display *display_init(struct ui *ui);
 void     display_free         (struct display *display);
 
 /* utility */
-uint32_t gettime_us(void);
+uint64_t gettime_us(void);
 
 void logmsg(const char *prefix, const char *postfix, int fatal, const char *fmt, ...);
 #define debug(...)  logmsg("[[36mdbg [0m]", "\r", 0, __VA_ARGS__)

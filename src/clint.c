@@ -120,7 +120,7 @@ void clint_tick(struct clint *clint)
 	clint->time = gettime_us();
 
 	for (size_t i = 0; i < clint->num_cpus; i++) {
-		if (clint->time > clint->timecmp[i])
+		if (clint->time >= clint->timecmp[i])
 			cpu_irq_set(clint->cpus[i], 7);
 		else
 			cpu_irq_clear(clint->cpus[i], 7);
