@@ -31,7 +31,7 @@ static struct termios tio_restore;
 /* restore terminal */
 void term_leave(void)
 {
-	fl_restore = fcntl(STDIN_FILENO, F_GETFL);
+	fcntl(STDIN_FILENO, F_SETFL, fl_restore);
 	tcsetattr(STDIN_FILENO, TCSAFLUSH, &tio_restore);
 }
 
@@ -81,6 +81,7 @@ void term_enter(void)
 	tcsetattr(STDIN_FILENO, TCSAFLUSH, &tio_raw);
 
 	/* set non-blocking */
+	fl_restore = fcntl(STDIN_FILENO, F_GETFL);
 	fcntl(STDIN_FILENO, F_SETFL, fl_restore | O_NONBLOCK);
 }
 
