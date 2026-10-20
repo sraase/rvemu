@@ -227,8 +227,6 @@ struct bus_ops uart_ops = {
 
 void uart_tick(struct uart *uart)
 {
-	uint8_t iir = uart->iir;
-
 	/* update receiver and transmitter state */
 	if (term_pending())
 		uart->lsr |= 0x01;
@@ -241,9 +239,11 @@ void uart_tick(struct uart *uart)
 	else if (uart->ier & 0x08 && uart->msr & 0x0F) uart->iir = 0x00;
 	else                                           uart->iir = 0x01;
 
-	/* trigger interrupt if state changed */
-	if (uart->plic && uart->iir != iir && !(uart->iir & 0x01))
-		plic_irq(uart->plic, uart->irqnum);
+	/* set interrupt state */
+	if (uart->plic) {
+		if (uart->iir & 0x01) plic_irq_clear(uart->plic, uart->irqnum);
+		else                  plic_irq_set  (uart->plic, uart->irqnum);
+	}
 
 	return;
 }
