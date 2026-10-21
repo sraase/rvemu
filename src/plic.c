@@ -13,13 +13,14 @@ struct plic {
 	struct   cpu **cpus;
 	size_t   num_cpus;
 	uint32_t pending;
+	uint32_t claimed;
 	uint32_t enabled[8];
 };
 
 static void plic_update(struct plic *plic)
 {
 	for (size_t i = 0; i < plic->num_cpus; i++) {
-		if (plic->pending & plic->enabled[i])
+		if (plic->pending & ~plic->claimed & plic->enabled[i])
 			cpu_irq_set(plic->cpus[i], 11);
 		else
 			cpu_irq_clear(plic->cpus[i], 11);
@@ -59,7 +60,8 @@ static int plic_read32(void *ctx, uint32_t addr, uint32_t *data)
 			*data = 0;
 			for (int i = 1; i < 32; ++i) {
 				uint32_t enabled = plic->enabled[(addr >> 12) & 0x07];
-				if (enabled & plic->pending & (1 << i)) {
+				if (enabled & ~plic->claimed & plic->pending & (1 << i)) {
+					plic->claimed |= (1 << i);
 					*data = i;
 					break;
 				}
@@ -116,7 +118,7 @@ static int plic_write32(void *ctx, uint32_t addr, uint32_t data)
 
 			/* acknowledge interrupt */
 			if (plic->enabled[(addr >> 12) & 0x07] & (1 << data)) {
-				plic->pending &= ~(1 << data);
+				plic->claimed &= ~(1 << data);
 				plic_update(plic);
 			}
 
@@ -140,7 +142,7 @@ struct bus_ops plic_ops = {
 	.write32 = plic_write32,
 };
 
-void plic_irq(struct plic *plic, unsigned irq)
+void plic_irq_set(struct plic *plic, unsigned irq)
 {
 	/* set interrupt pending */
 	if (irq < 1 || irq > 31) {
@@ -149,6 +151,19 @@ void plic_irq(struct plic *plic, unsigned irq)
 	}
 
 	plic->pending |= (1 << irq);
+	plic_update(plic);
+	return;
+}
+
+void plic_irq_clear(struct plic *plic, unsigned irq)
+{
+	/* set interrupt pending */
+	if (irq < 1 || irq > 31) {
+		warn("plic: invalid irq %d", irq);
+		return;
+	}
+
+	plic->pending &= ~(1 << irq);
 	plic_update(plic);
 	return;
 }

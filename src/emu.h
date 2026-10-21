@@ -173,7 +173,8 @@ void     clint_free       (struct clint *clint);
 extern   struct bus_ops plic_ops;
 struct   plic *plic_init(struct cpu **cpu, size_t num_cpus);
 void     plic_free      (struct plic *plic);
-void     plic_irq       (struct plic *plic, unsigned irq);
+void     plic_irq_set   (struct plic *plic, unsigned irq);
+void     plic_irq_clear (struct plic *plic, unsigned irq);
 
 /* uart */
 extern   struct bus_ops uart_ops;
